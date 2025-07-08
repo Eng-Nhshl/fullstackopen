@@ -4,8 +4,6 @@ const Header = ({title}) => <h1>{title}</h1>
 
 const Button = ({text, onClick}) => <button onClick={onClick}>{text}</button>
 
-const StatisticLine = ({text, value}) => <h3>{text} {value}</h3>
-
 const Statistics = ({good, neutral, bad, all, average, positive}) => {
   if (all === 0) {
     return (
