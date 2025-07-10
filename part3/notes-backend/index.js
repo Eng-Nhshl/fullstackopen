@@ -1,27 +1,9 @@
+require('dotenv').config()
 const express = require('express')
 const app = express()
-const cors = require('cors')
-
-app.use(cors())
+app.use(express.static('dist'))
+const Note = require('./models/note')
 app.use(express.json())
-
-let notes = [
-  {
-    id: "1",
-    content: "HTML is easy",
-    important: true
-  },
-  {
-    id: "2",
-    content: "Browser can execute only JavaScript",
-    important: false
-  },
-  {
-    id: "3",
-    content: "GET and POST are the most important methods of HTTP protocol",
-    important: true
-  }
-]
 
 const requestLogger = (request, response, next) => {
   console.log('Method:', request.method)
@@ -38,14 +20,16 @@ app.get('/', (req, res) => {
 })
 
 // view all notes in json format
-app.get('/api/notes', (req, res) => {
-  res.json(notes)
+app.get('/api/notes', (request, response) => {
+  Note.find({}).then(notes => {
+    response.json(notes)
+  })
 })
 
 // view a single note with its id
 app.get('/api/notes/:id', (req, res) => {
   const id = req.params.id
-  const note = notes.find(n => n.id === id)
+  const note = Note.find(n => n.id === id)
   note ?
     res.json(note)
     :
@@ -68,23 +52,21 @@ const generateID = () => {
   return String(maxID + 1)
 }
 // create a note
-app.post('/api/notes', (req, res) => {
-  const body = req.body
+app.post('/api/notes', (request, response) => {
+  const body = request.body
 
   if (!body.content) {
-    return res.status(404).json({
-      error: 'content missing!'
-    })
+    return response.status(400).json({ error: 'content missing' })
   }
 
-  const note = {
-    id: generateID(),
+  const note = new Note({
     content: body.content,
-    important: body.important || false
-  }
+    important: body.important || false,
+  })
 
-  notes = notes.concat(note)
-  res.json(note)
+  note.save().then(savedNote => {
+    response.json(savedNote)
+  })
 })
 
 const unknownEndpoint = (request, response) => {
@@ -92,7 +74,7 @@ const unknownEndpoint = (request, response) => {
 }
 app.use(unknownEndpoint)
 
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 })
