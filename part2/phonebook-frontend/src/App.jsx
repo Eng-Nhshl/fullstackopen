@@ -78,6 +78,15 @@ if (!persons) {
       setNewName('')
       setNewNumber('')
     })
+    .catch(error => {
+      setMessage({
+        errorMsg: error.response.data.error,
+        successMsg: null
+      })
+      setTimeout(() => {
+        setMessage({errorMsg: null, successMsg: null})
+      }, 5000);
+    })
   }
 
     const updatePerson = (id, updatedPerson) => {
