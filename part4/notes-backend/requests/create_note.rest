@@ -1,7 +1,8 @@
 POST http://localhost:3001/api/notes
 Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6Im1sdXVra2lhIiwiaWQiOiI2ODdjMTRjNGUyNzk2MzgwNmM5MThmY2YiLCJpYXQiOjE3NTI5NjY4MDN9.9HQceHV2S-ASkiKRTeYrC3ty_H4IAjSgFrZlkBB29iA
 
 {
-  "content": "Rest is one of the best methods for handling urls",
+  "content": "Single page apps use token based auth",
   "important": true
 }

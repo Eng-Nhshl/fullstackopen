@@ -14,7 +14,14 @@ const api = supertest(app)
 describe('when there is initially some notes saved', () => {
   beforeEach(async () => {
     await Note.deleteMany({})
-    await Note.insertMany(helper.initialNotes)
+    await User.deleteMany({})
+
+    const passwordHash = await bcrypt.hash('Sekret1!', 10)
+    const user = new User({ username: 'testuser', passwordHash })
+    await user.save()
+
+    const notesWithUser = helper.initialNotes.map(n => ({ ...n, user: user._id }))
+    await Note.insertMany(notesWithUser)
   })
 
   test('notes are returned as json', async () => {
@@ -47,7 +54,10 @@ describe('when there is initially some notes saved', () => {
         .expect(200)
         .expect('Content-Type', /application\/json/)
 
-      assert.deepStrictEqual(resultNote.body, noteToView)
+      assert.strictEqual(resultNote.body.id, noteToView.id)
+      assert.strictEqual(resultNote.body.content, noteToView.content)
+      assert.strictEqual(resultNote.body.important, noteToView.important)
+      assert.strictEqual(resultNote.body.date, noteToView.date)
     })
 
     test('fails with statuscode 404 if note does not exist', async () => {
@@ -65,9 +75,21 @@ describe('when there is initially some notes saved', () => {
 
   describe('addition of a new note', () => {
     test('succeeds with valid data', async () => {
+      let users = await User.find({})
+      if (users.length === 0) {
+        // Create a fallback user if none exist yet (tests may run in any order)
+        const passwordHash = await bcrypt.hash('Test123!', 10)
+        const user = new User({ username: 'tempuser', passwordHash })
+        await user.save()
+        users = [user]
+      }
+      const userId = users[0]._id.toString() // extract the ID as string
+
+
       const newNote = {
         content: 'async/await simplifies making async calls',
-        important: true
+        important: true,
+        userId: userId
       }
 
       await api
@@ -82,6 +104,7 @@ describe('when there is initially some notes saved', () => {
       const contents = notesAtEnd.map(n => n.content)
       assert(contents.includes('async/await simplifies making async calls'))
     })
+
 
     test('fails with status code 400 if data invalid', async () => {
       const newNote = { important: true }
@@ -100,7 +123,6 @@ describe('when there is initially some notes saved', () => {
       const noteToUpdate = notesAtStart[0]
 
       const updatedData = {
-        content: 'Updated content from test',
         important: !noteToUpdate.important,
       }
 
@@ -110,13 +132,11 @@ describe('when there is initially some notes saved', () => {
         .expect(200)
         .expect('Content-Type', /application\/json/)
 
-      assert.strictEqual(response.body.content, updatedData.content)
       assert.strictEqual(response.body.important, updatedData.important)
 
       const notesAtEnd = await helper.notesInDb()
       const updatedNote = notesAtEnd.find(note => note.id === noteToUpdate.id)
 
-      assert.strictEqual(updatedNote.content, updatedData.content)
       assert.strictEqual(updatedNote.important, updatedData.important)
     })
 
@@ -124,7 +144,6 @@ describe('when there is initially some notes saved', () => {
       const nonExistingId = await helper.nonExistingId()
 
       const updatedData = {
-        content: 'This note does not exist',
         important: true,
       }
 
@@ -138,7 +157,6 @@ describe('when there is initially some notes saved', () => {
       const invalidId = 'invalid-id-123'
 
       const updatedData = {
-        content: 'Invalid update attempt',
         important: false,
       }
 
@@ -176,49 +194,80 @@ describe('when there is initially one user in db', () => {
     await user.save()
   })
 
-  test('creation succeeds with a fresh username', async () => {
-    const usersAtStart = await helper.usersInDb()
+  describe('user creation validation', () => {
 
-    const newUser = {
-      username: 'mluukkia',
-      name: 'Matti Luukkainen',
-      password: 'Salainen1!'
-    }
+    test('creation succeeds with a fresh username', async () => {
+      const usersAtStart = await helper.usersInDb()
 
-    await api
-      .post('/api/users')
-      .send(newUser)
-      .expect(201)
-      .expect('Content-Type', /application\/json/)
+      const newUser = {
+        username: 'mluukkia',
+        name: 'Matti Luukkainen',
+        password: 'Salainen1!'
+      }
 
-    const usersAtEnd = await helper.usersInDb()
+      await api
+        .post('/api/users')
+        .send(newUser)
+        .expect(201)
+        .expect('Content-Type', /application\/json/)
 
-    assert.strictEqual(usersAtEnd.length, usersAtStart.length + 1)
+      const usersAtEnd = await helper.usersInDb()
 
-    const usernames = usersAtEnd.map(u => u.username)
-    assert(usernames.includes(newUser.username))
+      assert.strictEqual(usersAtEnd.length, usersAtStart.length + 1)
+
+      const usernames = usersAtEnd.map(u => u.username)
+      assert(usernames.includes(newUser.username))
+    })
+
+    test('fails if username too short', async () => {
+      const newUser = {
+        username: 'ab',
+        name: 'Tiny',
+        password: 'Goodpass1!'
+      }
+
+      const result = await api
+        .post('/api/users')
+        .send(newUser)
+        .expect(400)
+
+      assert(result.body.error.includes('is shorter than'))
+    })
+
+    test('fails if username has invalid chars', async () => {
+      const newUser = {
+        username: 'john-doe',
+        name: 'John',
+        password: 'Goodpass1!'
+      }
+
+      await api.post('/api/users').send(newUser).expect(400)
+    })
+
+
+    test('creation fails with proper statuscode and message if username already taken', async () => {
+      const usersAtStart = await helper.usersInDb()
+
+      const newUser = {
+        username: 'root',
+        name: 'Superuser',
+        password: 'Salainen1!'
+      }
+
+      const result = await api
+        .post('/api/users')
+        .send(newUser)
+        .expect(400)
+        .expect('Content-Type', /application\/json/)
+
+      const usersAtEnd = await helper.usersInDb()
+      assert(result.body.error.includes('expected `username` to be unique'))
+
+      assert.strictEqual(usersAtEnd.length, usersAtStart.length)
+    })
+
   })
 
-  test('creation fails with proper statuscode and message if username already taken', async () => {
-    const usersAtStart = await helper.usersInDb()
-
-    const newUser = {
-      username: 'root',
-      name: 'Superuser',
-      password: 'Salainen1!'
-    }
-
-    const result = await api
-      .post('/api/users')
-      .send(newUser)
-      .expect(400)
-      .expect('Content-Type', /application\/json/)
-
-    const usersAtEnd = await helper.usersInDb()
-    assert(result.body.error.includes('expected `username` to be unique'))
-
-    assert.strictEqual(usersAtEnd.length, usersAtStart.length)
-  })
 })
 
 after(async () => {

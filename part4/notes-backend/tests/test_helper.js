@@ -4,7 +4,7 @@ const User = require('../models/user')
 const initialNotes = [
   {
     content: 'Browser can execute only JavaScript',
-    important: false
+    important: false,
   },
   {
     content: 'HTML is easy',
